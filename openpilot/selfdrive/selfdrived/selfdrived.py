@@ -117,6 +117,10 @@ class SelfdriveD(CruiseHelper):
     self.is_metric = self.params.get_bool("IsMetric")
     self.is_ldw_enabled = self.params.get_bool("IsLdwEnabled")
     self.disengage_on_accelerator = self.params.get_bool("DisengageOnAccelerator")
+    # Hardcoded False: DisableDriverDistraction requires params_pyx.so to be rebuilt
+    # before get_bool("DisableDriverDistraction") is safe on this device.
+    # See commit message of feat: DisableDriverDistraction (deployed inert).
+    self.disable_driver_distraction = False
 
     car_recognized = self.CP.brand != 'mock'
 
@@ -246,8 +250,10 @@ class SelfdriveD(CruiseHelper):
     if not self.CP.pcmCruise and CS.vCruise > 250 and resume_pressed:
       self.events.add(EventName.resumeBlocked)
 
-    # Handle DM
-    if not self.CP.notCar:
+    # Handle DM (disable_driver_distraction=True skips the entire DM block;
+    # the longitudinalPlanSP events below would normally also live here, so
+    # we keep them inside the same block to preserve the prior contract.)
+    if not self.CP.notCar and not self.disable_driver_distraction:
       # Block engaging until lockout times out or ignition reset
       if self.sm['driverMonitoringState'].lockout and not self.dm_lockout_set:
         self.params.put_bool("DriverTooDistracted", True)

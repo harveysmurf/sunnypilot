@@ -28,6 +28,11 @@ sections:
     widget: toggle
     title: Always-On Driver Monitoring
     description: Enable driver monitoring even when sunnypilot is not engaged.
+  - key: DisableDriverDistraction
+    widget: toggle
+    title: Disable Driver Distraction Alerts
+    description: Disables all distraction and inattention warnings, sounds, and engagement blocks. The
+      driver camera continues recording but alerts are suppressed.
   - key: IsMetric
     widget: toggle
     title: Use Metric System
