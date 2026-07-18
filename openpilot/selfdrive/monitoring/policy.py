@@ -128,7 +128,7 @@ def face_orientation_from_model(orient_model, pos_model, rpy_calib):
 
 
 class DriverMonitoring:
-  def __init__(self, rhd_saved=False, settings=None, always_on=False):
+  def __init__(self, rhd_saved=False, settings=None, always_on=False, disabled=False):
     # init policy settings
     self.settings = settings if settings is not None else DRIVER_MONITOR_SETTINGS()
 
@@ -141,6 +141,11 @@ class DriverMonitoring:
 
     self.alert_level = AlertLevel.none
     self.always_on = always_on
+    # DisableDriverDistraction toggle: when True, the caller is signalling
+    # "skip all distraction/inattention alerts". Set by dmonitoringd.py via
+    # the params store. Until params_pyx.so on the device is rebuilt, this is
+    # hardcoded to False at every call site (see selfdrive/selfdrived/selfdrived.py).
+    self.disabled = disabled
     self.distracted_types = defaultdict(bool)
     self.driver_distracted = False
     self.driver_distraction_filter = FirstOrderFilter(0., self.settings._DISTRACTED_FILTER_TS, DT_DMON)
