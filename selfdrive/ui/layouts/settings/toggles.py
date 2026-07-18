@@ -32,6 +32,7 @@ DESCRIPTIONS = {
     "without a turn signal activated while driving over 31 mph (50 km/h)."
   ),
   "AlwaysOnDM": tr_noop("Enable driver monitoring even when sunnypilot is not engaged."),
+  "DisableDriverDistraction": tr_noop("Disables all distraction and inattention warnings, sounds, and engagement blocks. The driver camera continues recording but alerts are suppressed."),
   'RecordFront': tr_noop("Upload data from the driver facing camera and help improve the driver monitoring algorithm."),
   "IsMetric": tr_noop("Display speed in km/h instead of mph."),
   "RecordAudio": tr_noop("Record and store microphone audio while driving. The audio will be included in the dashcam video in comma connect."),
@@ -76,6 +77,12 @@ class TogglesLayout(Widget):
         "monitoring.png",
         False,
       ),
+      "DisableDriverDistraction": (
+        lambda: tr("Disable Driver Distraction Alerts"),
+        DESCRIPTIONS["DisableDriverDistraction"],
+        "eye_closed.png",
+        False,
+      ),
       "RecordFront": (
         lambda: tr("Record and Upload Driver Camera"),
         DESCRIPTIONS["RecordFront"],
@@ -109,10 +116,17 @@ class TogglesLayout(Widget):
     self._toggles = {}
     self._locked_toggles = set()
     for param, (title, desc, icon, needs_restart) in self._toggle_defs.items():
+      # Safety: DisableDriverDistraction may not be in params_pyx.so yet on
+      # the device. Wrap the read so the whole toggle UI doesn't crash if
+      # UnknownKeyName is raised — default to False (toggle visible, off).
+      try:
+        initial_state = self._params.get_bool(param)
+      except UnknownKeyName:
+        initial_state = False
       toggle = toggle_item(
         title,
         desc,
-        self._params.get_bool(param),
+        initial_state,
         callback=lambda state, p=param: self._toggle_callback(state, p),
         icon=icon,
       )
