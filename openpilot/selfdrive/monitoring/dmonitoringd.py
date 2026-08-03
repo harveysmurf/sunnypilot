@@ -13,12 +13,10 @@ def dmonitoringd_thread():
   sm = messaging.SubMaster(['driverStateV2', 'extrinsicsCalibration', 'carState', 'selfdriveState', 'modelV2',
                             'carControl'], poll='driverStateV2')
 
-  # disabled=False (hardcoded): the params_pyx.so binary on the comma3x device
-  # was compiled before DisableDriverDistraction existed in params_keys.h, so
-  # reading it at runtime raises UnknownKeyName. To enable: rebuild params_pyx.so
-  # AND replace the `False` with `params.get_bool("DisableDriverDistraction")`.
+  # params_pyx.so on the device has been rebuilt (md5 f16509d2...) and now
+  # knows the DisableDriverDistraction key, so we read it live from params.
   DM = DriverMonitoring(rhd_saved=params.get_bool("IsRhdDetected"), always_on=params.get_bool("AlwaysOnDM"),
-                        disabled=False)
+                        disabled=params.get_bool("DisableDriverDistraction"))
   demo_mode=False
 
   # 20Hz <- dmonitoringmodeld
