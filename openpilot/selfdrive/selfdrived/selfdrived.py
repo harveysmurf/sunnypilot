@@ -112,10 +112,9 @@ class SelfdriveD(CruiseHelper):
     self.is_metric = self.params.get_bool("IsMetric")
     self.is_ldw_enabled = self.params.get_bool("IsLdwEnabled")
     self.disengage_on_accelerator = self.params.get_bool("DisengageOnAccelerator")
-    # Hardcoded False: DisableDriverDistraction requires params_pyx.so to be rebuilt
-    # before get_bool("DisableDriverDistraction") is safe on this device.
-    # See commit message of feat: DisableDriverDistraction (deployed inert).
-    self.disable_driver_distraction = False
+    # DisableDriverDistraction: params_pyx.so on the device has been rebuilt
+    # (md5 f16509d2...) and now knows this key, so get_bool is safe at runtime.
+    self.disable_driver_distraction = self.params.get_bool("DisableDriverDistraction")
 
     car_recognized = self.CP.brand != 'mock'
 
