@@ -143,8 +143,8 @@ class DriverMonitoring:
     self.always_on = always_on
     # DisableDriverDistraction toggle: when True, the caller is signalling
     # "skip all distraction/inattention alerts". Set by dmonitoringd.py via
-    # the params store. Until params_pyx.so on the device is rebuilt, this is
-    # hardcoded to False at every call site (see selfdrive/selfdrived/selfdrived.py).
+    # the params store. params_pyx.so on the device has been rebuilt
+    # (md5 f16509d2...) so call sites read it live via params.get_bool.
     self.disabled = disabled
     self.distracted_types = defaultdict(bool)
     self.driver_distracted = False
