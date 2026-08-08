@@ -219,7 +219,15 @@ class Controls(ControlsExt):
     cs.upAccelCmd = float(self.LoC.pid.p)
     cs.uiAccelCmd = float(self.LoC.pid.i)
     cs.ufAccelCmd = float(self.LoC.pid.f)
-    cs.forceDecel = bool(self.sm['driverMonitoringState'].noResponseForceDecel or
+    # DisableDriverDistraction: belt-and-suspenders gate. policy.py already
+    # zeroes noResponseForceDecel when disabled, but we re-gate here so that
+    # any future code path that writes noResponseForceDecel (or a future
+    # refactor that bypasses policy.py) still can't force-decel the car.
+    # softDisabling is the openpilot soft-disable path (e.g. user holding
+    # cancel), which is unrelated to distraction and must remain gated only
+    # by selfdriveState.
+    disable_driver_distraction = Params().get_bool("DisableDriverDistraction")
+    cs.forceDecel = bool((self.sm['driverMonitoringState'].noResponseForceDecel and not disable_driver_distraction) or
                          (self.sm['selfdriveState'].state == State.softDisabling))
 
     # trigger the car's stock driver monitoring escalation
