@@ -18,6 +18,17 @@
 #   bash /data/openpilot/tools/disable-distraction-alerts/deploy_libparams.sh
 #
 # It must run from the repo checkout because it compiles openpilot/common sources.
+#
+# FULL DEPLOY SEQUENCE (from the device shell):
+#   cd /data/openpilot
+#   git fetch origin
+#   git reset --hard origin/sync/2026-08-25   # REQUIRED: history was force-pushed
+#                                             # (rebased); a plain git pull fails.
+#                                             # If /data was wiped you're on a
+#                                             # fresh clone and this is moot.
+#   bash tools/disable-distraction-alerts/deploy_libparams.sh
+#   git update-index --assume-unchanged prebuilt
+#   sudo reboot
 
 set -euo pipefail
 
