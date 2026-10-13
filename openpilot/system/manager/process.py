@@ -120,6 +120,15 @@ class ManagerProcess(ABC):
     cloudlog.info(f"sending signal {sig} to {self.name}")
     os.kill(self.proc.pid, sig)
 
+  def clear_exited_proc(self) -> None:
+    # a Process object stays referenced after its child died. start() returns early on
+    # any non-None proc, so a crashed daemon is never respawned and managerState keeps
+    # reporting shouldBeRunning=True/running=False, which blocks engagement in selfdrived
+    if self.proc is not None and self.proc.exitcode is not None:
+      cloudlog.warning(f"{self.name} died with {self.proc.exitcode}, dropping dead process to allow respawn")
+      self.proc = None
+      self.shutting_down = False
+
   def get_process_state_msg(self):
     state = log.ManagerState.ProcessState.new_message()
     state.name = self.name
@@ -146,6 +155,8 @@ class NativeProcess(ManagerProcess):
     if self.shutting_down:
       self.stop()
 
+    self.clear_exited_proc()
+
     if self.proc is not None:
       return
 
@@ -169,6 +180,8 @@ class PythonProcess(ManagerProcess):
     # In case we only tried a non blocking stop we need to stop it before restarting
     if self.shutting_down:
       self.stop()
+
+    self.clear_exited_proc()
 
     if self.proc is not None:
       return
