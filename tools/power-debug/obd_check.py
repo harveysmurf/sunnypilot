@@ -129,16 +129,18 @@ def main() -> int:
   any_ign = any(s["ign_line"] or s["ign_can"] for s in samples)
 
   # CarParams is only written once a car has been fingerprinted; CarParamsPersistent survives wipes.
-  car_params = params.get("CarParams")
-  car_persistent = params.get("CarParamsPersistent")
   recognized = None
-  if car_persistent:
+  for key in ("CarParams", "CarParamsPersistent"):
+    raw = params.get(key)
+    if not raw:
+      continue
     try:
-      import openpilot.cereal.log as log
-      with log.Event.from_bytes(car_persistent) as ev:
-        recognized = ev.carParams.carFingerprint or ev.carParams.carName
-    except Exception:
-      recognized = "present but written by another openpilot build (unparseable here)"
+      from opendbc.car.structs import car
+      cp = messaging.log_from_bytes(raw, car.CarParams)
+      recognized = f"{cp.carFingerprint} ({cp.brand})"
+      break
+    except Exception as e:
+      recognized = f"{key} present but unparseable ({e.__class__.__name__})"
 
   usb_online = power_supply("usb", "online")
   batt_status = power_supply("battery", "status")
