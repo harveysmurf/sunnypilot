@@ -71,6 +71,17 @@ FIELDS = [
 ]
 
 
+# AGNOS has no usable RTC at boot: the clock sits at the image build date until
+# systemd-timesyncd/NTP syncs it. Wall timestamps before this date are bogus.
+CLOCK_SANE_AFTER = datetime.datetime(2026, 10, 1)
+
+
+def clock_is_synced() -> bool:
+  if os.path.exists("/run/systemd/timesync/synchronized"):
+    return True
+  return datetime.datetime.now() >= CLOCK_SANE_AFTER
+
+
 def now_iso() -> str:
   return datetime.datetime.now().astimezone().isoformat(timespec="milliseconds")
 
@@ -328,7 +339,7 @@ def main() -> int:
   events.write(f"{now_iso()} START boot={boot} session={os.path.basename(session_path)}")
   events.write(f"{now_iso()} SESSION {os.path.basename(session_path)}")
   events.write(f"{now_iso()} PREVIOUS_SESSION_SUMMARY_FILE {SUMMARY}")
-  if datetime.datetime.now().year < 2026:
+  if not clock_is_synced():
     events.write(f"{now_iso()} CLOCK_UNSYNCED wall clock has not been set by NTP yet; "
                  "use the mono column for durations until it syncs")
 
@@ -409,7 +420,7 @@ def main() -> int:
             "started", "is_offroad", "do_shutdown", "pwr_w")
     events.write(f"{now_iso()} {reason} " + " ".join(f"{k}={row.get(k)}" for k in keys))
 
-  clock_fixed = datetime.datetime.now().year >= 2026
+  clock_fixed = clock_is_synced()
   session_start_wall = datetime.datetime.now()
 
   while True:
@@ -418,7 +429,7 @@ def main() -> int:
 
       if not clock_fixed:
         wall = datetime.datetime.now()
-        if wall.year >= 2026 and abs((wall - session_start_wall).total_seconds()) > 3600:
+        if clock_is_synced() and abs((wall - session_start_wall).total_seconds()) > 3600:
           clock_fixed = True
           session.close()
           new_path = os.path.join(SESSIONS, f"{wall.strftime('%Y%m%d-%H%M%S')}-{boot}.csv")
