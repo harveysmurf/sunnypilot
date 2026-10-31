@@ -209,6 +209,17 @@ def summarize_previous_session() -> str:
   except Exception:
     pass
 
+  harness_seen = sorted({str(r.get("harness") or "") for r in rows if r.get("harness")})
+  harness_connected = any(h not in ("notConnected", "unknown") for h in harness_seen)
+  panda_all = [col(r, "panda_mv") for r in rows]
+  panda_all = [v for v in panda_all if v is not None]
+  rx_vals = [col(r, "can_rx") for r in rows]
+  rx_vals = [v for v in rx_vals if v is not None]
+  can_rx_total = (rx_vals[-1] - rx_vals[0]) if len(rx_vals) > 1 else 0
+  obd_str = (f"harness={','.join(harness_seen) or '?'}, "
+             f"max car voltage={max(panda_all) if panda_all else '?'} mV, "
+             f"CAN rx during session={can_rx_total:.0f} frames")
+
   tail = []
   for row in rows[-8:]:
     tail.append("  " + ", ".join(f"{k}={row.get(k)}" for k in
@@ -228,6 +239,7 @@ def summarize_previous_session() -> str:
     f"samples      : {len(rows)}",
     f"som rail     : min {min(som) if som else '?'} mV, max {max(som) if som else '?'} mV, last {som[-1] if som else '?'} mV",
     f"car voltage  : {car_str}",
+    f"obd link     : {obd_str}",
     "",
     "VERDICT:",
     trig,
@@ -294,10 +306,10 @@ def detect_trigger(rows: list[dict], events: list[str]) -> str:
   if som and len(som) > 4 and (som[-1] - min(som[-4:])) < -500:
     return "  POWER COLLAPSE: rail dropped more than 500 mV just before the end."
   if harness == "notConnected":
-    return ("  INCONCLUSIVE: harness was not connected, so there was no car voltage to\n"
-            "  read. The device was running on internal battery. Check whether the OBD\n"
-            "  connector was plugged in and whether 12V is present on it.\n"
-            "  If the car was on, this means the harness/OBD link itself was down.")
+    return ("  NOT CONNECTED TO A CAR: the harness reported notConnected for the whole\n"
+            "  session, so there was no car voltage to read and this shutdown says\n"
+            "  nothing about the car. If the car was actually running/off and plugged\n"
+            "  in, the OBD link itself is the fault (harness, adapter, pin 16).")
   return ("  INCONCLUSIVE: the log ends without a software shutdown request or a rail\n"
           "  collapse in the last sample (last sample may predate a hard power cut).")
 

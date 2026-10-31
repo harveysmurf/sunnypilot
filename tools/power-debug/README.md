@@ -33,6 +33,18 @@ Latest session only (10 kept, ~15 MB each at 2 Hz, pruned automatically).
 | Did openpilot decide to shut down? | `do_shutdown`, `force_pd`, `is_offroad`, `uptime_offroad`, `maxtime` |
 | Was the internal battery carrying it? | `batt_status=Discharging`, `batt_mv`, `batt_ma` |
 
+## Live OBD / harness check
+
+```
+python3 /data/openpilot/tools/power-debug/obd_check.py        # human summary
+python3 /data/openpilot/tools/power-debug/obd_check.py --json # machine readable
+```
+
+Prints a verdict from `harnessStatus`, panda voltage (12 V vs ~5 V bench),
+CAN rx rate, ignition flags, `CarParams`, and USB/battery state. It only reads.
+Run it with the car on (or at least ignition on) to prove the bus is alive;
+on the bench it correctly reports "not connected to a car".
+
 ## Reading a shutdown
 
 1. `cat /data/power-debug/LAST_SESSION.txt` — the verdict block names the likely
