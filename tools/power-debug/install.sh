@@ -22,11 +22,12 @@ mount | grep -q " / .*\(ro,\)" && mount -o remount,rw /
 
 echo "[2/4] install $DEST"
 install -m 0644 "$SRC" "$DEST"
+install -m 0644 "$REPO/tools/power-debug/power-debug-shutdown.service" /etc/systemd/system/power-debug-shutdown.service
 ln -sf "$REPO/tools/power-debug/power_logger.py" /usr/local/bin/power-logger 2>/dev/null || true
 
 echo "[3/4] enable + restart"
 systemctl daemon-reload
-systemctl enable "$UNIT_NAME"
+systemctl enable "$UNIT_NAME" power-debug-shutdown.service
 systemctl restart "$UNIT_NAME"
 sleep 3
 systemctl is-active "$UNIT_NAME"

@@ -1,0 +1,12 @@
+[Unit]
+Description=Record a graceful shutdown marker for power-debug
+DefaultDependencies=no
+Before=shutdown.target
+After=power-debug.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'echo "$(date -Is) SYSTEM_SHUTDOWN graceful halt/reboot started" >> /data/power-debug/events.log; sync -f /data/power-debug/events.log || true'
+
+[Install]
+WantedBy=shutdown.target

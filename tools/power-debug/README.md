@@ -53,6 +53,13 @@ Verdicts it distinguishes:
 ## Uninstall
 
 ```
-sudo systemctl disable --now power-debug.service
-sudo mount -o remount,rw / && sudo rm /etc/systemd/system/power-debug.service && sudo mount -o remount,ro /
+sudo systemctl disable --now power-debug.service power-debug-shutdown.service
+sudo mount -o remount,rw / \
+  && sudo rm /etc/systemd/system/power-debug.service /etc/systemd/system/power-debug-shutdown.service \
+  && sudo systemctl daemon-reload \
+  && sudo mount -o remount,ro /
 ```
+
+A `SYSTEM_SHUTDOWN` line in `events.log` means systemd was asked to halt/reboot
+gracefully (openpilot's `DoShutdown`, a manual reboot, or an AGNOS update). No
+such line means the device lost power or halted abruptly.

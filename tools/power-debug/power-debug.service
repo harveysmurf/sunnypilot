@@ -9,7 +9,6 @@ Type=simple
 Environment=PYTHONPATH=/data/openpilot
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/local/venv/bin/python /data/openpilot/tools/power-debug/power_logger.py
-ExecStop=/bin/sh -c 'echo "$(date -Is) SYSTEM_SHUTDOWN power-debug stopped by systemd (graceful halt/reboot)" >> /data/power-debug/events.log; sync -f /data/power-debug/events.log || true'
 Restart=always
 RestartSec=2
 Nice=-5
