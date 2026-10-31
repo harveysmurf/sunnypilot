@@ -16,6 +16,7 @@ SRC="$REPO/tools/power-debug/power-debug.service"
 [ -f "$SRC" ] || { echo "missing $SRC" >&2; exit 1; }
 
 mkdir -p /data/power-debug/sessions
+chown -R comma:comma /data/power-debug
 
 echo "[1/4] remount / rw"
 mount | grep -q " / .*\(ro,\)" && mount -o remount,rw /
