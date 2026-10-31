@@ -177,15 +177,22 @@ def summarize_previous_session() -> str:
   car_str = (f"min {min(panda):.0f} mV, max {max(panda):.0f} mV, last {panda[-1]:.0f} mV"
              if panda else "n/a (harness reported notConnected for this session)")
 
-  # events that happened after this session started
+  # events that happened after this session started, located by the SESSION marker
   events = []
   try:
-    event_start = datetime.datetime.fromisoformat(t0).timestamp()
     with open(EVENT_LOG) as f:
-      for line in f:
+      all_lines = [ln.rstrip() for ln in f]
+    marker = f"SESSION {name}"
+    start_idx = max((i for i, ln in enumerate(all_lines) if marker in ln), default=-1)
+    if start_idx >= 0:
+      events = all_lines[start_idx + 1:]
+    else:
+      # older logs without a marker: fall back to the first row timestamp
+      event_start = datetime.datetime.fromisoformat(t0).timestamp()
+      for ln in all_lines:
         try:
-          if datetime.datetime.fromisoformat(line.split(" ")[0]).timestamp() >= event_start:
-            events.append(line.rstrip())
+          if datetime.datetime.fromisoformat(ln.split(" ")[0]).timestamp() >= event_start:
+            events.append(ln)
         except Exception:
           continue
   except Exception:
@@ -319,6 +326,7 @@ def main() -> int:
   session = Sink(session_path)
   session.write(",".join(FIELDS))
   events.write(f"{now_iso()} START boot={boot} session={os.path.basename(session_path)}")
+  events.write(f"{now_iso()} SESSION {os.path.basename(session_path)}")
   events.write(f"{now_iso()} PREVIOUS_SESSION_SUMMARY_FILE {SUMMARY}")
   if datetime.datetime.now().year < 2026:
     events.write(f"{now_iso()} CLOCK_UNSYNCED wall clock has not been set by NTP yet; "
@@ -401,9 +409,29 @@ def main() -> int:
             "started", "is_offroad", "do_shutdown", "pwr_w")
     events.write(f"{now_iso()} {reason} " + " ".join(f"{k}={row.get(k)}" for k in keys))
 
+  clock_fixed = datetime.datetime.now().year >= 2026
+  session_start_wall = datetime.datetime.now()
+
   while True:
     try:
       sm.update(0)
+
+      if not clock_fixed:
+        wall = datetime.datetime.now()
+        if wall.year >= 2026 and abs((wall - session_start_wall).total_seconds()) > 3600:
+          clock_fixed = True
+          session.close()
+          new_path = os.path.join(SESSIONS, f"{wall.strftime('%Y%m%d-%H%M%S')}-{boot}.csv")
+          try:
+            os.rename(session_path, new_path)
+            session_path = new_path
+            session = Sink(session_path)
+            events.write(f"{now_iso()} CLOCK_SYNCED renamed session to {os.path.basename(session_path)}")
+            events.write(f"{now_iso()} SESSION {os.path.basename(session_path)}")
+          except Exception as e:
+            events.write(f"{now_iso()} CLOCK_RENAME_FAILED {e!r}")
+            session = Sink(session_path)
+
       ps_list = sm["pandaStates"]
       periph = sm["peripheralState"]
       dev = sm["deviceState"]
