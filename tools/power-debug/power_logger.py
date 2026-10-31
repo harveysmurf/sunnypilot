@@ -172,8 +172,10 @@ def summarize_previous_session() -> str:
 
   som = [col(r, "som_mv") for r in rows]
   som = [v for v in som if v is not None]
-  panda = [col(r, "panda_mv") for r in rows]
+  panda = [col(r, "panda_mv") for r in rows if str(r.get("harness") or "") not in ("", "notConnected")]
   panda = [v for v in panda if v is not None]
+  car_str = (f"min {min(panda):.0f} mV, max {max(panda):.0f} mV, last {panda[-1]:.0f} mV"
+             if panda else "n/a (harness reported notConnected for this session)")
 
   # events that happened after this session started
   events = []
@@ -196,13 +198,18 @@ def summarize_previous_session() -> str:
                  "ign_line", "ign_can", "harness", "do_shutdown", "pwr_w")))
 
   trig = detect_trigger(rows, events)
+  try:
+    recorded = datetime.datetime.fromtimestamp(os.path.getmtime(csv_path)).astimezone().isoformat(timespec="seconds")
+  except Exception:
+    recorded = "unknown"
   lines_out = [
     f"session file : {name}",
+    f"recorded     : {recorded}",
     f"window       : {t0} -> {t1}"
     + (f"  ({duration/60:.1f} min)" if duration is not None else ""),
     f"samples      : {len(rows)}",
     f"som rail     : min {min(som) if som else '?'} mV, max {max(som) if som else '?'} mV, last {som[-1] if som else '?'} mV",
-    f"car voltage  : min {min(panda) if panda else '?'} mV, max {max(panda) if panda else '?'} mV, last {panda[-1] if panda else '?'} mV",
+    f"car voltage  : {car_str}",
     "",
     "VERDICT:",
     trig,
@@ -217,39 +224,64 @@ def summarize_previous_session() -> str:
 
 
 def detect_trigger(rows: list[dict], events: list[str]) -> str:
-  def col(row, key, default=None):
+  def fnum(row, key):
     try:
       return float(row.get(key, ""))
     except Exception:
-      return default
+      return None
 
   last = rows[-1]
-  do_shutdown = str(last.get("do_shutdown")) in ("True", "1", "true")
-  force_pd = str(last.get("force_pd")) in ("True", "1", "true")
-  som = [col(r, "som_mv") for r in rows]
+  do_shutdown = str(last.get("do_shutdown")).lower() in ("true", "1")
+  force_pd = str(last.get("force_pd")).lower() in ("true", "1")
+  harness = str(last.get("harness") or "")
+
+  som = [fnum(r, "som_mv") for r in rows]
   som = [v for v in som if v is not None]
-  panda = [col(r, "panda_mv") for r in rows]
-  panda = [v for v in panda if v is not None]
-  alert_events = [e for e in events if "ina_alert" in e.lower() or "RAIL" in e]
+  # panda voltage is only the car-side voltage while the harness is connected
+  car = [fnum(r, "panda_mv") for r in rows if str(r.get("harness") or "") not in ("", "notConnected")]
+  car = [v for v in car if v is not None]
+  usb_online = [fnum(r, "usb_online") for r in rows]
+  batt = [str(r.get("batt_status") or "") for r in rows]
 
   if any("LastPowerDropDetected" in e for e in events):
-    return ("  power was cut: /usr/comma/power_drop_monitor.py recorded a drop\n"
-            "  (see the PREP/SHUTDOWN/ABORT lines in the events above)")
+    return ("  EXTERNAL POWER WAS CUT: /usr/comma/power_drop_monitor.py recorded a drop\n"
+            "  and halted the device (see PREP/SHUTDOWN lines above). This is the power\n"
+            "  path, not openpilot: 12V disappeared before/while the rail collapsed.")
   if do_shutdown:
-    return ("  openpilot requested shutdown (DoShutdown=True in the last sample);\n"
-            "  check ignition, harness, voltage and offroad time in the rows above")
+    detail = "openpilot requested shutdown (DoShutdown=True in the last sample)."
+    if car and car[-1] < 11800:
+      detail += f"\n  car voltage was low ({car[-1]:.0f} mV), which triggers low-voltage shutdown."
+    try:
+      uptime_offroad = float(str(last.get("uptime_offroad") or ""))
+      maxtime = float(str(last.get("maxtime") or ""))
+      if maxtime and uptime_offroad >= maxtime * 60 - 5:
+        detail += f"\n  offroad for {uptime_offroad/60:.0f} min, MaxTimeOffroad is {maxtime:.0f} min."
+    except Exception:
+      pass
+    if str(last.get("ign_line")).lower() in ("false", "0") and str(last.get("ign_can")).lower() in ("false", "0"):
+      detail += "\n  ignition was already off; check how long it had been offroad."
+    return "  SOFTWARE SHUTDOWN: " + detail
   if force_pd:
-    return "  ForcePowerDown param was set by a user/tool, not the car"
+    return "  FORCED: ForcePowerDown was set by a user/tool, not by the car."
   if som and som[-1] < RAIL_CRIT_MV:
-    return (f"  SoM input rail collapsed to {som[-1]:.0f} mV (< {RAIL_CRIT_MV} mV);\n"
-            "  external supply was removed or sagged below the INA231 alert threshold")
-  if panda and panda[-1] < 11000 and min(panda) < 11000:
-    return (f"  car-side voltage on the harness dropped to {min(panda):.0f} mV\n"
-            "  before the end; OBD/12V supply looks switched or disconnected")
-  if alert_events:
-    return "  INA231 alert fired (see events); supply likely dropped out"
-  return ("  inconclusive: the log ends without a software shutdown request or a\n"
-          "  rail collapse in the last sample (last sample may predate a hard power cut)")
+    return (f"  POWER COLLAPSE: SoM rail fell to {som[-1]:.0f} mV (< {RAIL_CRIT_MV} mV),\n"
+            "  i.e. external supply was removed and the internal battery could not hold it.")
+  if usb_online and usb_online[0] == 1 and usb_online[-1] == 0:
+    return ("  EXTERNAL SUPPLY LOST: usb_online went 1 -> 0 during the session, so the\n"
+            "  device switched to its internal battery; it then stopped before writing\n"
+            "  a software shutdown request (battery exhausted or the INA alert fired).")
+  if "Charging" in batt and batt[-1] != "Charging":
+    return ("  EXTERNAL SUPPLY LOST: battery went from Charging to "
+            f"{batt[-1]}; the 12V feed dropped.")
+  if som and len(som) > 4 and (som[-1] - min(som[-4:])) < -500:
+    return "  POWER COLLAPSE: rail dropped more than 500 mV just before the end."
+  if harness == "notConnected":
+    return ("  INCONCLUSIVE: harness was not connected, so there was no car voltage to\n"
+            "  read. The device was running on internal battery. Check whether the OBD\n"
+            "  connector was plugged in and whether 12V is present on it.\n"
+            "  If the car was on, this means the harness/OBD link itself was down.")
+  return ("  INCONCLUSIVE: the log ends without a software shutdown request or a rail\n"
+          "  collapse in the last sample (last sample may predate a hard power cut).")
 
 
 def rotate_event_log() -> None:
@@ -277,7 +309,7 @@ def main() -> int:
   summary = summarize_previous_session()
   try:
     with open(SUMMARY, "w") as f:
-      f.write(f"previous session summary, written {now_iso()}\n\n{summary}\n")
+      f.write(f"previous session summary\n\n{summary}\n")
   except Exception:
     pass
 
@@ -288,6 +320,9 @@ def main() -> int:
   session.write(",".join(FIELDS))
   events.write(f"{now_iso()} START boot={boot} session={os.path.basename(session_path)}")
   events.write(f"{now_iso()} PREVIOUS_SESSION_SUMMARY_FILE {SUMMARY}")
+  if datetime.datetime.now().year < 2026:
+    events.write(f"{now_iso()} CLOCK_UNSYNCED wall clock has not been set by NTP yet; "
+                 "use the mono column for durations until it syncs")
 
   print(summary, flush=True)
 
